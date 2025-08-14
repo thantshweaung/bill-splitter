@@ -12,7 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const historyList = document.getElementById('history-list');
     const savedPersonNamesDatalist = document.getElementById('saved-names-datalist');
     const savedRestaurantsDatalist = document.getElementById('saved-restaurants-datalist');
+    const billSlipUpload = document.getElementById('bill-slip-upload');
+    const billSlipContainer = document.getElementById('bill-slip-container');
+    const billSlipImage = document.getElementById('bill-slip-image');
+    const removeBillSlipBtn = document.getElementById('remove-bill-slip-btn');
 
+    let currentBillSlip = null; // To hold the base64 string of the uploaded image
     let currentNames = []; // Now: { name: string, pax: number, paid: boolean }
 
     // --- Initial Setup ---
@@ -190,6 +195,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function handleBillSlipUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentBillSlip = e.target.result;
+                billSlipImage.src = currentBillSlip;
+                billSlipContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function removeBillSlip() {
+        currentBillSlip = null;
+        billSlipUpload.value = ''; // Reset file input
+        billSlipContainer.style.display = 'none';
+        billSlipImage.src = '#';
+    }
+
     // --- History Functions ---
     function saveHistory() {
         const restaurantName = restaurantNameInput.value.trim();
@@ -207,6 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
             billTotal,
             names: currentNames,
             payer: paidBySelect.value,
+            billSlip: currentBillSlip
         };
 
         let history = getBillHistory();
@@ -252,6 +278,15 @@ document.addEventListener('DOMContentLoaded', () => {
             restaurantNameInput.value = item.restaurantName;
             billTotalInput.value = item.billTotal;
             currentNames = item.names.map(p => (typeof p === 'string') ? { name: p, pax: 1, paid: false } : { ...p, paid: p.paid || false });
+            
+            if (item.billSlip) {
+                currentBillSlip = item.billSlip;
+                billSlipImage.src = currentBillSlip;
+                billSlipContainer.style.display = 'block';
+            } else {
+                removeBillSlip();
+            }
+
             renderNames();
             paidBySelect.value = item.payer || 'everyone';
             calculateAndDisplay();
@@ -322,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         billTotalInput.value = '';
         personNameInput.value = '';
         currentNames = [];
+        removeBillSlip();
         renderNames();
         paidBySelect.value = 'everyone';
         resultDiv.innerHTML = '';
@@ -329,6 +365,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveBtn.addEventListener('click', saveHistory);
     exportBtn.addEventListener('click', exportToPNG);
+    billSlipUpload.addEventListener('change', handleBillSlipUpload);
+    removeBillSlipBtn.addEventListener('click', removeBillSlip);
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

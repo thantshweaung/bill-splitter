@@ -23,6 +23,14 @@
                     <datalist id="saved-restaurants-datalist"></datalist>
                 </div>
                 <div class="mb-3">
+                    <label for="bill-slip-upload" class="form-label">Upload Bill Slip</label>
+                    <input class="form-control" type="file" id="bill-slip-upload" accept="image/*">
+                </div>
+                <div class="mb-3 text-center" id="bill-slip-container" style="display: none;">
+                    <img id="bill-slip-image" src="#" alt="Bill Slip" class="img-fluid rounded" style="max-height: 300px;">
+                    <button id="remove-bill-slip-btn" class="btn btn-sm btn-danger mt-2">Remove Image</button>
+                </div>
+                <div class="mb-3">
                     <label for="bill-total" class="form-label">Bill Total</label>
                     <div class="input-group">
                         <span class="input-group-text">$</span>
@@ -42,7 +50,7 @@
                     </select>
                 </div>
                 <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                    <button id="export-btn" class="btn btn-info me-md-2">Export as PNG</button>
+                    <button id="export-btn" class="btn btn-warning me-md-2">Export as PNG</button>
                     <button id="save-btn" class="btn btn-success me-md-2">Save</button>
                     <button id="reset-btn" class="btn btn-danger">Reset</button>
                 </div>
