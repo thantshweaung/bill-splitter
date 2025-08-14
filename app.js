@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const paidBySelect = document.getElementById('paid-by-select');
     const resetBtn = document.getElementById('reset-btn');
     const saveBtn = document.getElementById('save-btn');
+    const exportBtn = document.getElementById('export-btn');
     const resultDiv = document.getElementById('result');
     const historyList = document.getElementById('history-list');
     const savedPersonNamesDatalist = document.getElementById('saved-names-datalist');
@@ -264,6 +265,25 @@ document.addEventListener('DOMContentLoaded', () => {
         renderHistory();
     }
 
+    function exportToPNG() {
+        const resultNode = document.querySelector('#result .alert');
+        if (!resultNode) {
+            alert('Nothing to export!');
+            return;
+        }
+
+        html2canvas(resultNode, {
+            scale: 2, // Higher scale for better quality
+            useCORS: true,
+            backgroundColor: '#f8f9fa'
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `bill-splitter-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    }
+
     // --- Datalist & LocalStorage ---
     function populateSavedNames() {
         const savedPersonNames = getSavedPersonNames();
@@ -308,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     saveBtn.addEventListener('click', saveHistory);
+    exportBtn.addEventListener('click', exportToPNG);
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
