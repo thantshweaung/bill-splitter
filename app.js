@@ -84,40 +84,105 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function calculateAndDisplay() {
-        const restaurantName = restaurantNameInput.value.trim();
-        const billTotal = parseFloat(billTotalInput.value);
-        const names = currentNames;
-        const totalPax = names.reduce((sum, person) => sum + person.pax, 0);
-        const payer = paidBySelect.value;
+    const restaurantName = restaurantNameInput.value.trim();
+    const billTotal = parseFloat(billTotalInput.value);
+    const names = currentNames;
+    const totalPax = names.reduce((sum, person) => sum + person.pax, 0);
+    const payer = paidBySelect.value;
 
-        if (isNaN(billTotal) || billTotal <= 0 || totalPax === 0) {
-            resultDiv.innerHTML = '';
-            return;
+    if (isNaN(billTotal) || billTotal <= 0 || totalPax === 0) {
+        resultDiv.innerHTML = '';
+        return;
+    }
+
+    saveAllPersonNames(names.map(p => p.name));
+    saveRestaurantName(restaurantName);
+    populateSavedNames();
+
+    const totalAmount = billTotal;
+    const amountPerShare = totalAmount / totalPax;
+
+    let resultHTML = `<div class="alert alert-info">`;
+    if (restaurantName) {
+        resultHTML += `<h4 class="alert-heading">${restaurantName}</h4>`;
+    }
+    resultHTML += `<p class="mb-1"><strong>Total Bill:</strong> ${totalAmount.toFixed(2)}</p><hr>`;
+
+    const listItems = [];
+
+    if (payer === 'everyone') {
+        resultHTML += `<p class="mb-2 fs-5"><strong>Price per Share:</strong> ${amountPerShare.toFixed(2)}</p>`;
+        
+        let paymentDetails = names.map(person => {
+            const personTotal = person.pax * amountPerShare;
+            const balance = person.amountPaid - personTotal;
+            return { ...person, personTotal, balance };
+        });
+
+        const totalOverpayment = paymentDetails
+            .filter(p => p.balance > 0)
+            .reduce((sum, p) => sum + p.balance, 0);
+
+        const totalUnderpayment = paymentDetails
+            .filter(p => p.balance < 0)
+            .reduce((sum, p) => sum + Math.abs(p.balance), 0);
+        
+        if (totalOverpayment > 0 && totalUnderpayment > 0) {
+            const creditToDistribute = Math.min(totalOverpayment, totalUnderpayment);
+            paymentDetails = paymentDetails.map(person => {
+                let newBalance = person.balance;
+                if (person.balance < 0) { // Underpaid
+                    const creditReceived = (Math.abs(person.balance) / totalUnderpayment) * creditToDistribute;
+                    newBalance += creditReceived;
+                } else if (person.balance > 0) { // Overpaid
+                    const creditGiven = (person.balance / totalOverpayment) * creditToDistribute;
+                    newBalance -= creditGiven;
+                }
+                return { ...person, balance: newBalance };
+            });
         }
 
-        saveAllPersonNames(names.map(p => p.name));
-        saveRestaurantName(restaurantName);
-        populateSavedNames();
+        paymentDetails.forEach((person, index) => {
+            const personTotal = person.personTotal;
+            const amountOwed = -person.balance;
+            
+            let itemClass = '';
+            let badgeClass = 'bg-primary';
+            let badgeText = `Owes ${amountOwed.toFixed(2)}`;
 
-        const totalAmount = billTotal;
-        const amountPerShare = totalAmount / totalPax;
+            if (amountOwed <= 0.01) { // Small tolerance for floating point
+                itemClass = 'list-group-item-success';
+                badgeClass = 'bg-success';
+                badgeText = 'Paid';
+            }
+            if (amountOwed < -0.01) { 
+                badgeText = `Overpaid by ${Math.abs(amountOwed).toFixed(2)}`;
+            }
 
-        let resultHTML = `<div class="alert alert-info">`;
-        if (restaurantName) {
-            resultHTML += `<h4 class="alert-heading">${restaurantName}</h4>`;
-        }
-        resultHTML += `<p class="mb-1"><strong>Total Bill:</strong> ${totalAmount.toFixed(2)}</p><hr>`;
+            listItems.push(`
+                <li class="list-group-item d-flex justify-content-between align-items-center ${itemClass}">
+                    <div>
+                        ${person.name} (${person.pax} pax) - Owes: ${personTotal.toFixed(2)}
+                        <div class="input-group input-group-sm mt-1">
+                            <span class="input-group-text">Paid:</span>
+                            <input type="number" class="form-control" value="${person.amountPaid.toFixed(2)}" step="0.01" data-name="${person.name}">
+                        </div>
+                    </div>
+                    <span class="badge ${badgeClass} rounded-pill">${badgeText}</span>
+                </li>`);
+        });
 
-        const listItems = [];
+    } else {
+        resultHTML += `<p class="mb-2 fs-5"><strong>Paid by:</strong> ${payer}</p>`;
+        names.forEach((person, index) => {
+            const personOwes = person.pax * amountPerShare;
+             const amountOwed = personOwes - person.amountPaid;
 
-        if (payer === 'everyone') {
-            resultHTML += `<p class="mb-2 fs-5"><strong>Price per Share:</strong> ${amountPerShare.toFixed(2)}</p>`;
-            names.forEach((person, index) => {
-                const personTotal = person.pax * amountPerShare;
-                const amountOwed = personTotal - person.amountPaid;
-                
+            if (person.name === payer) {
+                listItems.push(`<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success">${person.name} (Payer) <span class="badge bg-success rounded-pill">Paid ${totalAmount.toFixed(2)}</span></li>`);
+            } else {
                 let itemClass = '';
-                let badgeClass = 'bg-primary';
+                let badgeClass = 'bg-danger';
                 let badgeText = `Owes ${amountOwed.toFixed(2)}`;
 
                 if (amountOwed <= 0) {
@@ -125,15 +190,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     badgeClass = 'bg-success';
                     badgeText = 'Paid';
                 }
-                if (amountOwed < -0.01) { // Small tolerance for floating point
+                 if (amountOwed < -0.01) {
                     badgeText = `Overpaid by ${Math.abs(amountOwed).toFixed(2)}`;
                 }
 
-
                 listItems.push(`
                     <li class="list-group-item d-flex justify-content-between align-items-center ${itemClass}">
-                        <div>
-                            ${person.name} (${person.pax} pax) - Owes: ${personTotal.toFixed(2)}
+                         <div>
+                            ${person.name} (${person.pax} pax) - Owes: ${personOwes.toFixed(2)}
                             <div class="input-group input-group-sm mt-1">
                                 <span class="input-group-text">Paid:</span>
                                 <input type="number" class="form-control" value="${person.amountPaid.toFixed(2)}" step="0.01" data-name="${person.name}">
@@ -141,54 +205,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <span class="badge ${badgeClass} rounded-pill">${badgeText}</span>
                     </li>`);
-            });
-        } else {
-            resultHTML += `<p class="mb-2 fs-5"><strong>Paid by:</strong> ${payer}</p>`;
-            names.forEach((person, index) => {
-                const personOwes = person.pax * amountPerShare;
-                 const amountOwed = personOwes - person.amountPaid;
-
-                if (person.name === payer) {
-                    listItems.push(`<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success">${person.name} (Payer) <span class="badge bg-success rounded-pill">Paid ${totalAmount.toFixed(2)}</span></li>`);
-                } else {
-                    let itemClass = '';
-                    let badgeClass = 'bg-danger';
-                    let badgeText = `Owes ${amountOwed.toFixed(2)}`;
-
-                    if (amountOwed <= 0) {
-                        itemClass = 'list-group-item-success';
-                        badgeClass = 'bg-success';
-                        badgeText = 'Paid';
-                    }
-                     if (amountOwed < -0.01) {
-                        badgeText = `Overpaid by ${Math.abs(amountOwed).toFixed(2)}`;
-                    }
-
-                    listItems.push(`
-                        <li class="list-group-item d-flex justify-content-between align-items-center ${itemClass}">
-                             <div>
-                                ${person.name} (${person.pax} pax) - Owes: ${personOwes.toFixed(2)}
-                                <div class="input-group input-group-sm mt-1">
-                                    <span class="input-group-text">Paid:</span>
-                                    <input type="number" class="form-control" value="${person.amountPaid.toFixed(2)}" step="0.01" data-name="${person.name}">
-                                </div>
-                            </div>
-                            <span class="badge ${badgeClass} rounded-pill">${badgeText}</span>
-                        </li>`);
-                }
-            });
-        }
-
-        resultHTML += `<ul class="list-group">${listItems.join('')}</ul></div>`;
-        resultDiv.innerHTML = resultHTML;
-
-        // Add event listeners after rendering
-        resultDiv.querySelectorAll('input[type="number"]').forEach(input => {
-            input.addEventListener('change', (e) => {
-                updateAmountPaid(e.target.dataset.name, parseFloat(e.target.value));
-            });
+            }
         });
     }
+
+    resultHTML += `<ul class="list-group">${listItems.join('')}</ul></div>`;
+    resultDiv.innerHTML = resultHTML;
+
+    // Add event listeners after rendering
+    resultDiv.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('change', (e) => {
+            updateAmountPaid(e.target.dataset.name, parseFloat(e.target.value));
+        });
+    });
+}
 
     // --- Data Manipulation Functions ---
     function addPerson(name) {
