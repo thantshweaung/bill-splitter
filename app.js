@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeBillSlipBtn = document.getElementById('remove-bill-slip-btn');
 
     let currentBillSlip = null; // To hold the base64 string of the uploaded image
-    let currentNames = []; // Now: { name: string, pax: number, paid: boolean }
+    let currentNames = []; // Now: { name: string, pax: number, amountPaid: number }
 
     // --- Initial Setup ---
     function initialize() {
@@ -114,16 +114,30 @@ document.addEventListener('DOMContentLoaded', () => {
             resultHTML += `<p class="mb-2 fs-5"><strong>Price per Share:</strong> ${amountPerShare.toFixed(2)}</p>`;
             names.forEach((person, index) => {
                 const personTotal = person.pax * amountPerShare;
-                const isPaid = person.paid;
-                const itemClass = isPaid ? 'list-group-item-success' : '';
-                const badgeClass = isPaid ? 'bg-success' : 'bg-primary';
-                const badgeText = isPaid ? 'Paid' : personTotal.toFixed(2);
+                const amountOwed = personTotal - person.amountPaid;
+                
+                let itemClass = '';
+                let badgeClass = 'bg-primary';
+                let badgeText = `Owes ${amountOwed.toFixed(2)}`;
+
+                if (amountOwed <= 0) {
+                    itemClass = 'list-group-item-success';
+                    badgeClass = 'bg-success';
+                    badgeText = 'Paid';
+                }
+                if (amountOwed < -0.01) { // Small tolerance for floating point
+                    badgeText = `Overpaid by ${Math.abs(amountOwed).toFixed(2)}`;
+                }
+
 
                 listItems.push(`
                     <li class="list-group-item d-flex justify-content-between align-items-center ${itemClass}">
                         <div>
-                            <input class="form-check-input me-2" type="checkbox" id="paid-checkbox-${index}" ${isPaid ? 'checked' : ''} data-name="${person.name}">
-                            ${person.name} (${person.pax} pax)
+                            ${person.name} (${person.pax} pax) - Owes: ${personTotal.toFixed(2)}
+                            <div class="input-group input-group-sm mt-1">
+                                <span class="input-group-text">Paid:</span>
+                                <input type="number" class="form-control" value="${person.amountPaid.toFixed(2)}" step="0.01" data-name="${person.name}">
+                            </div>
                         </div>
                         <span class="badge ${badgeClass} rounded-pill">${badgeText}</span>
                     </li>`);
@@ -132,19 +146,32 @@ document.addEventListener('DOMContentLoaded', () => {
             resultHTML += `<p class="mb-2 fs-5"><strong>Paid by:</strong> ${payer}</p>`;
             names.forEach((person, index) => {
                 const personOwes = person.pax * amountPerShare;
-                const isPaid = person.paid;
-                const itemClass = isPaid ? 'list-group-item-success' : '';
-                const badgeClass = isPaid ? 'bg-success' : 'bg-danger';
-                const badgeText = isPaid ? 'Paid' : `Owes ${personOwes.toFixed(2)}`;
+                 const amountOwed = personOwes - person.amountPaid;
 
                 if (person.name === payer) {
                     listItems.push(`<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success">${person.name} (Payer) <span class="badge bg-success rounded-pill">Paid ${totalAmount.toFixed(2)}</span></li>`);
                 } else {
+                    let itemClass = '';
+                    let badgeClass = 'bg-danger';
+                    let badgeText = `Owes ${amountOwed.toFixed(2)}`;
+
+                    if (amountOwed <= 0) {
+                        itemClass = 'list-group-item-success';
+                        badgeClass = 'bg-success';
+                        badgeText = 'Paid';
+                    }
+                     if (amountOwed < -0.01) {
+                        badgeText = `Overpaid by ${Math.abs(amountOwed).toFixed(2)}`;
+                    }
+
                     listItems.push(`
                         <li class="list-group-item d-flex justify-content-between align-items-center ${itemClass}">
-                            <div>
-                                <input class="form-check-input me-2" type="checkbox" id="paid-checkbox-${index}" ${isPaid ? 'checked' : ''} data-name="${person.name}">
-                                ${person.name} (${person.pax} pax)
+                             <div>
+                                ${person.name} (${person.pax} pax) - Owes: ${personOwes.toFixed(2)}
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text">Paid:</span>
+                                    <input type="number" class="form-control" value="${person.amountPaid.toFixed(2)}" step="0.01" data-name="${person.name}">
+                                </div>
                             </div>
                             <span class="badge ${badgeClass} rounded-pill">${badgeText}</span>
                         </li>`);
@@ -156,9 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
         resultDiv.innerHTML = resultHTML;
 
         // Add event listeners after rendering
-        resultDiv.querySelectorAll('.form-check-input').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                togglePaidStatus(e.target.dataset.name, e.target.checked);
+        resultDiv.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('change', (e) => {
+                updateAmountPaid(e.target.dataset.name, parseFloat(e.target.value));
             });
         });
     }
@@ -166,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Data Manipulation Functions ---
     function addPerson(name) {
         if (name && !currentNames.some(p => p.name === name)) {
-            currentNames.push({ name, pax: 1, paid: false });
+            currentNames.push({ name, pax: 1, amountPaid: 0 });
             renderNames();
             calculateAndDisplay();
         }
@@ -187,10 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function togglePaidStatus(name, isPaid) {
+    function updateAmountPaid(name, amount) {
         const person = currentNames.find(p => p.name === name);
-        if (person) {
-            person.paid = isPaid;
+        if (person && !isNaN(amount)) {
+            person.amountPaid = amount;
             calculateAndDisplay(); // Re-render to show visual feedback
         }
     }
@@ -277,7 +304,20 @@ document.addEventListener('DOMContentLoaded', () => {
             billDateInput.value = item.billDate || new Date(item.id).toISOString().slice(0, 10);
             restaurantNameInput.value = item.restaurantName;
             billTotalInput.value = item.billTotal;
-            currentNames = item.names.map(p => (typeof p === 'string') ? { name: p, pax: 1, paid: false } : { ...p, paid: p.paid || false });
+            
+            const totalPax = (item.names || []).reduce((sum, p) => sum + (p.pax || 1), 0);
+            const amountPerShare = item.billTotal / totalPax;
+
+            currentNames = item.names.map(p => {
+                if (typeof p === 'string') { // Very old format
+                    return { name: p, pax: 1, amountPaid: 0 };
+                }
+                if (typeof p.paid === 'boolean') { // Old format with paid boolean
+                    const personTotal = (p.pax || 1) * amountPerShare;
+                    return { ...p, amountPaid: p.paid ? personTotal : 0 };
+                }
+                return { ...p, amountPaid: p.amountPaid || 0 }; // New format
+            });
             
             if (item.billSlip) {
                 currentBillSlip = item.billSlip;
