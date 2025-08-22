@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const billSlipContainer = document.getElementById('bill-slip-container');
     const billSlipImage = document.getElementById('bill-slip-image');
     const removeBillSlipBtn = document.getElementById('remove-bill-slip-btn');
+    const scanBillBtn = document.getElementById('scan-bill-btn');
+    const scanSpinner = document.getElementById('scan-spinner');
 
     let currentBillSlip = null; // To hold the base64 string of the uploaded image
     let currentNames = []; // Now: { name: string, pax: number, amountPaid: number }
@@ -255,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleBillSlipUpload(event) {
         const file = event.target.files[0];
         if (file) {
+            scanBillBtn.disabled = false;
             const reader = new FileReader();
             reader.onload = (e) => {
                 currentBillSlip = e.target.result;
@@ -262,6 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 billSlipContainer.style.display = 'block';
             };
             reader.readAsDataURL(file);
+        } else {
+            scanBillBtn.disabled = true;
         }
     }
 
@@ -270,6 +275,68 @@ document.addEventListener('DOMContentLoaded', () => {
         billSlipUpload.value = ''; // Reset file input
         billSlipContainer.style.display = 'none';
         billSlipImage.src = '#';
+        scanBillBtn.disabled = true;
+    }
+
+    async function scanBill() {
+        if (!currentBillSlip) {
+            alert('Please upload a bill slip image first.');
+            return;
+        }
+
+        scanSpinner.style.display = 'inline-block';
+        scanBillBtn.disabled = true;
+
+        try {
+            const { data: { text } } = await Tesseract.recognize(
+                currentBillSlip,
+                'eng',
+                { logger: m => console.log(m) } // Optional: log progress
+            );
+
+            // Find the best candidate for the total amount
+            const lines = text.split('\n');
+            let bestCandidate = null;
+            // Regex to find numbers with decimals, optionally preceded by keywords
+            const amountRegex = /(?:total|amount|subtotal|due)[\s:]*([0-9,]+\.[0-9]{2})/i;
+            const genericAmountRegex = /([0-9,]+\.[0-9]{2})/g;
+
+            lines.forEach(line => {
+                const match = line.match(amountRegex);
+                if (match && match[1]) {
+                    const value = parseFloat(match[1].replace(',', ''));
+                    if (bestCandidate === null || value > bestCandidate) {
+                        bestCandidate = value;
+                    }
+                }
+            });
+            
+            // If no keyword match, find the largest number on the receipt
+            if (bestCandidate === null) {
+                 const allMatches = text.match(genericAmountRegex) || [];
+                 allMatches.forEach(match => {
+                     const value = parseFloat(match.replace(',', ''));
+                     if (bestCandidate === null || value > bestCandidate) {
+                         bestCandidate = value;
+                     }
+                 });
+            }
+
+
+            if (bestCandidate !== null) {
+                billTotalInput.value = bestCandidate.toFixed(2);
+                calculateAndDisplay(); // Recalculate with the new total
+            } else {
+                alert('Could not automatically find the total amount. Please enter it manually.');
+            }
+
+        } catch (error) {
+            console.error('OCR Error:', error);
+            alert('An error occurred during the bill scan.');
+        } finally {
+            scanSpinner.style.display = 'none';
+            scanBillBtn.disabled = false;
+        }
     }
 
     // --- History Functions ---
@@ -353,6 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentBillSlip = item.billSlip;
                 billSlipImage.src = currentBillSlip;
                 billSlipContainer.style.display = 'block';
+                scanBillBtn.disabled = false;
             } else {
                 removeBillSlip();
             }
@@ -437,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
     exportBtn.addEventListener('click', exportToPNG);
     billSlipUpload.addEventListener('change', handleBillSlipUpload);
     removeBillSlipBtn.addEventListener('click', removeBillSlip);
+    scanBillBtn.addEventListener('click', scanBill);
 
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
